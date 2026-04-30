@@ -158,10 +158,13 @@ export function InvoicePaper({
 
             {/* Payment phases */}
             <div className="pt-4 mt-4 border-t border-foreground/10">
-              <div className="mb-2 bg-foreground text-background px-3 py-2 text-[11px] font-semibold uppercase tracking-wider">
+              <div
+                className="mb-5 w-full px-3 py-2 text-[11px] font-semibold uppercase tracking-wider rounded-sm"
+                style={{ backgroundColor: "#111", color: "#fff" }}
+              >
                 Payment phases
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 pt-1">
                 <div className="flex items-start justify-between gap-3">
                   <EditableText
                     as="div"

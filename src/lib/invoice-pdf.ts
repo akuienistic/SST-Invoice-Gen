@@ -55,6 +55,52 @@ function buildFilename(invoice: InvoiceState) {
   return parts.join("_") + ".pdf";
 }
 
+/** Section rules: between “invisible” (~230+) and “too heavy” (~110). Tuned for screen + print. */
+const PDF_RULE_SECTION_GRAY = 190;
+const PDF_RULE_STRONG_GRAY = 158;
+const PDF_RULE_SIGNATURE_GRAY = 182;
+const PDF_RULE_WIDTH_PT = 0.55;
+
+function strokeHorizontalRule(doc: jsPDF, x1: number, y: number, x2: number, gray: number, widthPt = PDF_RULE_WIDTH_PT) {
+  doc.setLineWidth(widthPt);
+  doc.setDrawColor(gray, gray, gray);
+  doc.line(x1, y, x2, y);
+}
+
+/** One line only: shrink font to fit; never word-wrap. Ellipsis only if still too long at min size. */
+function drawPhaseRowSingleLine(
+  doc: jsPDF,
+  font: string,
+  labelX: number,
+  amountX: number,
+  y: number,
+  label: string,
+  amountStr: string
+) {
+  const gap = 10;
+  const maxW = Math.max(40, amountX - labelX - gap);
+  let display = (label || "").replace(/\s+/g, " ").trim();
+  doc.setFont(font, "normal");
+  let size = 9;
+  const minSize = 6;
+  doc.setFontSize(size);
+  while (size > minSize && doc.getTextWidth(display) > maxW) {
+    size -= 0.5;
+    doc.setFontSize(size);
+  }
+  if (doc.getTextWidth(display) > maxW) {
+    const ell = "…";
+    let t = display;
+    while (t.length > 0 && doc.getTextWidth(t + ell) > maxW) {
+      t = t.slice(0, -1).trimEnd();
+    }
+    display = t.length < display.length ? t + ell : t;
+  }
+  doc.setTextColor(70);
+  doc.text(display, labelX, y);
+  doc.text(amountStr, amountX, y, { align: "right" });
+}
+
 interface GenerateArgs {
   invoice: InvoiceState;
   totals: { subtotal: number; discount: number; total: number };
@@ -106,8 +152,8 @@ export async function generateInvoicePdf({ invoice, totals, password }: Generate
   doc.text(`Due: ${invoice.dueDate}`, pageWidth - margin, y + 68, { align: "right" });
 
   y += 95;
-  doc.setDrawColor(220);
-  doc.line(margin, y, pageWidth - margin, y);
+  // Match on-screen: header bottom border (border-foreground/10)
+  strokeHorizontalRule(doc, margin, y, pageWidth - margin, PDF_RULE_SECTION_GRAY);
   y += 18;
 
   // From / Bill to
@@ -138,6 +184,9 @@ export async function generateInvoicePdf({ invoice, totals, password }: Generate
     y += 12;
   }
 
+  y += 8;
+  // Match on-screen: section rule before line items
+  strokeHorizontalRule(doc, margin, y, pageWidth - margin, PDF_RULE_SECTION_GRAY);
   y += 14;
 
   // Items table
@@ -172,7 +221,10 @@ export async function generateInvoicePdf({ invoice, totals, password }: Generate
     margin: { left: margin, right: margin },
   });
 
-  y = (doc as any).lastAutoTable.finalY + 20;
+  y = (doc as any).lastAutoTable.finalY + 12;
+  // Match on-screen: separator after line items block
+  strokeHorizontalRule(doc, margin, y, pageWidth - margin, PDF_RULE_SECTION_GRAY);
+  y += 18;
 
   // Totals
   const totalsX = pageWidth - margin - 200;
@@ -191,36 +243,62 @@ export async function generateInvoicePdf({ invoice, totals, password }: Generate
     doc.text(`- ${formatMoney(totals.discount, invoice.currency)}`, pageWidth - margin, y, { align: "right" });
     y += 14;
   }
-  doc.setDrawColor(20);
-  doc.line(totalsX, y, pageWidth - margin, y);
+  // Match on-screen: border above Total (border-foreground/20)
+  strokeHorizontalRule(doc, totalsX, y, pageWidth - margin, PDF_RULE_STRONG_GRAY);
   y += 16;
   doc.setFont(FONT, "bold");
   doc.setFontSize(13);
   doc.setTextColor(20);
   doc.text("Total", totalsX, y);
   doc.text(formatMoney(totals.total, invoice.currency), pageWidth - margin, y, { align: "right" });
-  y += 30;
+  y += 22;
 
   // Payment phases (50/50)
   const phases = splitIntoTwoEqualPhases(totals.total);
+  const sectionW = pageWidth - margin - totalsX;
   const barH = 14;
+  // Match on-screen: border above payment phases (narrow totals column)
+  strokeHorizontalRule(doc, totalsX, y, pageWidth - margin, PDF_RULE_SECTION_GRAY);
+  y += 12;
+
   doc.setFillColor(20, 20, 20);
-  doc.rect(totalsX, y - 10, pageWidth - margin - totalsX, barH, "F");
+  doc.rect(totalsX, y - 10, sectionW, barH, "F");
   doc.setFont(FONT, "bold");
   doc.setFontSize(8);
   doc.setTextColor(255);
   doc.text("PAYMENT PHASES", totalsX + 8, y);
-  y += 14;
+  y += 24;
 
-  doc.setFont(FONT, "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(70);
-  doc.text(invoice.paymentPhases?.phase1Label || "Phase 1 — 50%", totalsX, y);
-  doc.text(formatMoney(phases.phase1, invoice.currency), pageWidth - margin, y, { align: "right" });
-  y += 12;
-  doc.text(invoice.paymentPhases?.phase2Label || "Phase 2 — 50%", totalsX, y);
-  doc.text(formatMoney(phases.phase2, invoice.currency), pageWidth - margin, y, { align: "right" });
-  y += 26;
+  const labelX = totalsX + 8;
+  const amountX = pageWidth - margin;
+  const rowStep = 14;
+
+  const p1Label = invoice.paymentPhases?.phase1Label || "Phase 1 — 50%";
+  drawPhaseRowSingleLine(
+    doc,
+    FONT,
+    labelX,
+    amountX,
+    y,
+    p1Label,
+    formatMoney(phases.phase1, invoice.currency)
+  );
+  y += rowStep;
+
+  const p2Label = invoice.paymentPhases?.phase2Label || "Phase 2 — 50%";
+  drawPhaseRowSingleLine(
+    doc,
+    FONT,
+    labelX,
+    amountX,
+    y,
+    p2Label,
+    formatMoney(phases.phase2, invoice.currency)
+  );
+  y += rowStep + 10;
+  // Match on-screen: full-width rule before footer (Payment instructions / Notes)
+  strokeHorizontalRule(doc, margin, y, pageWidth - margin, PDF_RULE_SECTION_GRAY);
+  y += 20;
 
   // Footer sections
   doc.setFont(FONT, "bold");
@@ -244,8 +322,14 @@ export async function generateInvoicePdf({ invoice, totals, password }: Generate
   doc.setFontSize(11);
   doc.setTextColor(20);
   doc.text(invoice.signature, pageWidth - margin, y, { align: "right" });
-  doc.setDrawColor(180);
-  doc.line(pageWidth - margin - 150, y + 4, pageWidth - margin, y + 4);
+  strokeHorizontalRule(
+    doc,
+    pageWidth - margin - 150,
+    y + 4,
+    pageWidth - margin,
+    PDF_RULE_SIGNATURE_GRAY,
+    PDF_RULE_WIDTH_PT * 0.9
+  );
   doc.setFont(FONT, "normal");
   doc.setFontSize(8);
   doc.setTextColor(130);
