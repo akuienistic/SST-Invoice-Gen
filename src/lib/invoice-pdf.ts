@@ -305,7 +305,7 @@ export async function generateInvoicePdf({ invoice, totals, password }: Generate
   doc.setFontSize(8);
   doc.setTextColor(130);
   doc.text("PAYMENT INSTRUCTIONS", margin, y);
-  doc.text("NOTES & TERMS", margin + colW, y);
+  doc.text("TERMS AND CONDITIONS", margin + colW, y);
   y += 12;
 
   doc.setFont(FONT, "normal");

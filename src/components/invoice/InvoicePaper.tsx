@@ -209,7 +209,7 @@ export function InvoicePaper({
             />
           </div>
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Notes & terms</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Terms and Conditions</div>
             <EditableText
               as="div"
               multiline

@@ -51,7 +51,7 @@ const addDays = (days: number) => {
 export const DEFAULT_INVOICE: InvoiceState = {
   invoiceNumber: `SST-${new Date().getFullYear()}-001`,
   issueDate: today(),
-  dueDate: addDays(14),
+  dueDate: addDays(7),
   from: {
     name: "Simon Star Tech",
     tagline: "A spark of creativity and innovation in tech",
@@ -76,7 +76,7 @@ export const DEFAULT_INVOICE: InvoiceState = {
     phase1Label: "Phase 1 — 50% (Project start)",
     phase2Label: "Phase 2 — 50% (On delivery)",
   },
-  notes: "Thank you for your business. Payment is due within 14 days of the issue date.",
+  notes: "Thank you for your business. Payment is due within 7 days of the issue date.",
   paymentInstructions: "Bank: [Bank name]\nAccount name: Simon Star Tech\nAccount number: [xxxx-xxxx]",
   signature: "Simon Star Tech",
 };
