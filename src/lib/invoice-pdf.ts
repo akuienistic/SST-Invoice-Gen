@@ -67,6 +67,47 @@ function strokeHorizontalRule(doc: jsPDF, x1: number, y: number, x2: number, gra
   doc.line(x1, y, x2, y);
 }
 
+/** Content after the line-items table is drawn manually; only autoTable paginates. When `y` is too low, add a page. */
+function ensureVerticalSpace(doc: jsPDF, y: number, margin: number, spaceNeeded: number): number {
+  const pageBottom = doc.internal.pageSize.getHeight() - margin;
+  if (y + spaceNeeded <= pageBottom) return y;
+  doc.addPage();
+  return margin;
+}
+
+/** Two columns that stay row-aligned; breaks to a new page when either column would clip. */
+function drawFooterTwoColumns(
+  doc: jsPDF,
+  font: string,
+  payLines: string[],
+  noteLines: string[],
+  margin: number,
+  colW: number,
+  yStart: number,
+  lineHeight: number
+): number {
+  const pageBottom = doc.internal.pageSize.getHeight() - margin;
+  const xPay = margin;
+  const xTerms = margin + colW;
+  let y = yStart;
+  const maxRows = Math.max(payLines.length, noteLines.length);
+  doc.setFont(font, "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(70);
+  for (let i = 0; i < maxRows; i++) {
+    if (y + lineHeight > pageBottom) {
+      doc.addPage();
+      y = margin;
+    }
+    const pl = payLines[i];
+    const nl = noteLines[i];
+    if (pl) doc.text(pl, xPay, y);
+    if (nl) doc.text(nl, xTerms, y);
+    y += lineHeight;
+  }
+  return y;
+}
+
 /** One line only: shrink font to fit; never word-wrap. Ellipsis only if still too long at min size. */
 function drawPhaseRowSingleLine(
   doc: jsPDF,
@@ -231,6 +272,20 @@ export async function generateInvoicePdf({ invoice, totals, password }: Generate
   });
 
   y = (doc as any).lastAutoTable.finalY + 12;
+
+  const footerLineLead = 11;
+  doc.setFont(FONT, "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(70);
+  const payLines = doc.splitTextToSize(invoice.paymentInstructions || "", colW - 10);
+  const noteLines = doc.splitTextToSize(invoice.notes || "", colW - 10);
+
+  /** Totals column + payment phases (~subtotal/discount rows + separators + phases bar block). Buffer avoids clipping edge cases. */
+  const totalsAndPhasesReserve =
+    (invoice.discountType !== "none" && totals.discount > 0 ? 178 : 160) + 24;
+
+  y = ensureVerticalSpace(doc, y, margin, 18 + totalsAndPhasesReserve);
+
   // Match on-screen: separator after line items block
   strokeHorizontalRule(doc, margin, y, pageWidth - margin, PDF_RULE_SECTION_GRAY);
   y += 18;
@@ -305,6 +360,9 @@ export async function generateInvoicePdf({ invoice, totals, password }: Generate
     formatMoney(phases.phase2, invoice.currency)
   );
   y += rowStep + 10;
+  /** Start footer + at least ~1 synced line + signature spacer; continuation pages come from drawFooterTwoColumns(). */
+  y = ensureVerticalSpace(doc, y, margin, 140);
+
   // Match on-screen: full-width rule before footer (Payment instructions / Notes)
   strokeHorizontalRule(doc, margin, y, pageWidth - margin, PDF_RULE_SECTION_GRAY);
   y += 20;
@@ -317,14 +375,10 @@ export async function generateInvoicePdf({ invoice, totals, password }: Generate
   doc.text("TERMS AND CONDITIONS", margin + colW, y);
   y += 12;
 
-  doc.setFont(FONT, "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(70);
-  const payLines = doc.splitTextToSize(invoice.paymentInstructions, colW - 10);
-  const noteLines = doc.splitTextToSize(invoice.notes, colW - 10);
-  doc.text(payLines, margin, y);
-  doc.text(noteLines, margin + colW, y);
-  y += Math.max(payLines.length, noteLines.length) * 11 + 30;
+  y = drawFooterTwoColumns(doc, FONT, payLines, noteLines, margin, colW, y, footerLineLead);
+  y += 30;
+
+  y = ensureVerticalSpace(doc, y, margin, 52);
 
   // Signature
   doc.setFont(FONT, "bold");
