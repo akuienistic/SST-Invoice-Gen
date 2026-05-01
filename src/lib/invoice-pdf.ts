@@ -199,10 +199,19 @@ export async function generateInvoicePdf({ invoice, totals, password }: Generate
 
   autoTable(doc, {
     startY: y,
-    head: [["Description", "Qty", "Unit price", "Amount"]],
+    // jsPDF-AutoTable applies `columnStyles` to body cells only (not head/foot), so we set
+    // header alignment per cell. Shared `cellPadding` matches body rows (body had 8, head defaulted).
+    head: [
+      [
+        { content: "Description", styles: { halign: "left" } },
+        { content: "Qty", styles: { halign: "right" } },
+        { content: "Unit price", styles: { halign: "right" } },
+        { content: "Amount", styles: { halign: "right" } },
+      ],
+    ],
     body,
     theme: "plain",
-    styles: { font: FONT },
+    styles: { font: FONT, cellPadding: 8 },
     headStyles: {
       font: FONT,
       fillColor: [20, 20, 20],
